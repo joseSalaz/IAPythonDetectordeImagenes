@@ -7,7 +7,7 @@ import easyocr
 import re
 import numpy as np
 
-
+app = FastAPI()
 # Variables globales
 model = None
 processor = None
@@ -26,7 +26,7 @@ def load_models():
     print("⏳ Cargando OCR...")
     reader = easyocr.Reader(['es', 'en'])
     print("✅ OCR cargado")
-    
+
 
 def clasificar_binario(imagen: Image.Image, clase_positiva: str, clase_negativa: str):
     inputs = processor(
