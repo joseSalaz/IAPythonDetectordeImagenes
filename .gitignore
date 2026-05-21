@@ -1,0 +1,13 @@
+# Python basura
+__pycache__/
+*.pyc
+
+# Entorno virtual
+venv/
+.venv/
+
+# Modelos grandes (opcional)
+*.pt
+
+# Jupyter
+.ipynb_checkpoints/

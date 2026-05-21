@@ -1,0 +1,173 @@
+from transformers import CLIPProcessor, CLIPModel
+from PIL import Image
+import torch
+
+model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+def clasificar_binario(imagen_path: str, clase_positiva: str, clase_negativa: str):
+    """Clasifica entre dos clases, devuelve confianza 0-100% independiente"""
+    imagen = Image.open(imagen_path).convert("RGB")
+    
+    inputs = processor(
+        text=[clase_positiva, clase_negativa],
+        images=imagen,
+        return_tensors="pt",
+        padding=True
+    )
+    
+    with torch.no_grad():
+        outputs = model(**inputs)
+    
+    probs = outputs.logits_per_image.softmax(dim=1)[0]
+    return round(float(probs[0]) * 100, 2)
+
+
+def clasificar_subclases(imagen_path: str, subclases: list[str]):
+    """Clasifica entre subclases para mostrar detalle (no afecta resultado principal)"""
+    imagen = Image.open(imagen_path).convert("RGB")
+    
+    inputs = processor(
+        text=subclases,
+        images=imagen,
+        return_tensors="pt",
+        padding=True
+    )
+    
+    with torch.no_grad():
+        outputs = model(**inputs)
+    
+    probs = outputs.logits_per_image.softmax(dim=1)[0]
+    
+    resultados = [
+        {
+            'clase': clase,
+            'confianza': round(float(prob) * 100, 2)
+        }
+        for clase, prob in zip(subclases, probs)
+    ]
+    
+    return sorted(resultados, key=lambda x: x['confianza'], reverse=True)
+
+
+def clasificar_objeto(imagen_path: str):
+
+    # ============================================================
+    # 1. CLASIFICACIÓN PRINCIPAL (independiente, 0-100% cada una)
+    # ============================================================
+    confianza_libro = clasificar_binario(
+        imagen_path,
+        "a book with a cover and pages",
+        "this is not a book"
+    )
+    
+    confianza_paquete = clasificar_binario(
+        imagen_path,
+        "a cardboard box or shipping package",
+        "this is not a package or box"
+    )
+
+    # ============================================================
+    # 2. SUBCLASES DE LIBRO (solo informativo)
+    # ============================================================
+    subclases_libro = [
+        "una novela con portada ilustrada",
+        "un libro de tapa blanda",
+        "un libro de tapa dura",
+        "un libro con lomo visible",
+        "un libro parado sobre una mesa",
+        "un libro acostado sobre una superficie",
+        "un libro con portada colorida",
+        "un libro de ficción con ilustración",
+        "un libro escolar o de texto",
+        "un libro de cuentos o novela",
+        "un libro con título en la portada",
+        "un libro de literatura clásica",
+        "un libro infantil con dibujos",
+        "un libro universitario o académico",
+        "un diccionario o enciclopedia",
+        "un libro con portada de persona",
+        "un libro con portada oscura",
+        "un libro apilado con otros libros",
+        "un libro en una estantería",
+        "un comic o manga",
+    ]
+
+    # ============================================================
+    # 3. SUBCLASES DE PAQUETE (solo informativo)
+    # ============================================================
+    subclases_paquete = [
+        "una caja de cartón marrón",
+        "un paquete de envío sellado con cinta",
+        "una caja rectangular de cartón",
+        "un paquete de delivery o courier",
+        "una caja de embalaje corrugado",
+        "un paquete envuelto en papel marrón",
+        "una caja de cartón cerrada",
+        "un paquete con etiqueta de envío",
+        "una caja de cartón abierta",
+        "un sobre de burbujas amarillo",
+        "una caja blanca de cartón",
+        "un paquete de plástico sellado",
+        "una caja con cinta adhesiva marrón",
+        "un paquete con logos de courier",
+        "una caja de mudanza grande",
+    ]
+
+    detalle_libro   = clasificar_subclases(imagen_path, subclases_libro)
+    detalle_paquete = clasificar_subclases(imagen_path, subclases_paquete)
+
+    # ============================================================
+    # 4. MOSTRAR RESULTADOS
+    # ============================================================
+    print("\n" + "=" * 55)
+    print("🎯 CLASIFICACIÓN PRINCIPAL (independiente)")
+    print("=" * 55)
+    print(f"  📚 Libro:   {confianza_libro}%")
+    print(f"  📦 Paquete: {confianza_paquete}%")
+
+    print("\n" + "=" * 55)
+    print("📚 DETALLE SUBCLASES - LIBRO (informativo)")
+    print("=" * 55)
+    for r in detalle_libro[:5]:  # top 5
+        print(f"  {r['clase']}: {r['confianza']}%")
+
+    print("\n" + "=" * 55)
+    print("📦 DETALLE SUBCLASES - PAQUETE (informativo)")
+    print("=" * 55)
+    for r in detalle_paquete[:5]:  # top 5
+        print(f"  {r['clase']}: {r['confianza']}%")
+
+    # ============================================================
+    # 5. CATEGORÍA FINAL
+    # ============================================================
+    umbral = 60
+    print("\n" + "=" * 55)
+    if confianza_libro >= umbral and confianza_libro > confianza_paquete:
+        print(f"✅ Categoría final: 📚 LIBRO ({confianza_libro}%)")
+        categoria = "LIBRO"
+        confianza_final = confianza_libro
+    elif confianza_paquete >= umbral and confianza_paquete > confianza_libro:
+        print(f"✅ Categoría final: 📦 PAQUETE ({confianza_paquete}%)")
+        categoria = "PAQUETE"
+        confianza_final = confianza_paquete
+    else:
+        print(f"❓ Categoría final: DESCONOCIDO")
+        categoria = "DESCONOCIDO"
+        confianza_final = max(confianza_libro, confianza_paquete)
+    print("=" * 55)
+
+    return {
+        "categoria": categoria,
+        "confianza": confianza_final,
+        "detalle": {
+            "libro": confianza_libro,
+            "paquete": confianza_paquete,
+            "subclases_libro": detalle_libro[:5],
+            "subclases_paquete": detalle_paquete[:5]
+        }
+    }
+
+
+# Uso
+clasificar_objeto(r"D:\jose\ah\proyecto completo\IAPython\la-odisea-libro.jpg")
