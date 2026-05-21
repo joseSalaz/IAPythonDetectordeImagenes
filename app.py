@@ -8,16 +8,25 @@ import re
 import numpy as np
 
 
-app = FastAPI()
+# Variables globales
+model = None
+processor = None
+reader = None
 
-# Cargar modelo una sola vez al iniciar
-print("⏳ Cargando modelo CLIP...")
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-print("✅ Modelo cargado")
-print("⏳ Cargando modelo OCR...")
-reader = easyocr.Reader(['es', 'en'])  # español e inglés
-print("✅ Modelo OCR cargado")
+
+@app.on_event("startup")
+def load_models():
+    global model, processor, reader
+
+    print("⏳ Cargando modelo CLIP...")
+    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    print("✅ Modelo CLIP cargado")
+
+    print("⏳ Cargando OCR...")
+    reader = easyocr.Reader(['es', 'en'])
+    print("✅ OCR cargado")
+    
 
 def clasificar_binario(imagen: Image.Image, clase_positiva: str, clase_negativa: str):
     inputs = processor(
