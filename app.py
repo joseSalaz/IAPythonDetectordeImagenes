@@ -21,29 +21,28 @@ def root():
     return {"status": "ok"}
 
 
-@app.on_event("startup")
-def load_models():
+def ensure_models_loaded():
     global model, processor, reader
 
-    token = os.getenv("HF_TOKEN")
+    if model is None or processor is None:
+        token = os.getenv("HF_TOKEN")
 
-    print("⏳ Cargando modelo CLIP...")
+        print("⏳ Cargando modelo CLIP...")
+        model = CLIPModel.from_pretrained(
+            "openai/clip-vit-base-patch32",
+            token=token
+        )
 
-    model = CLIPModel.from_pretrained(
-        "openai/clip-vit-base-patch32",
-        token=token
-    )
+        processor = CLIPProcessor.from_pretrained(
+            "openai/clip-vit-base-patch32",
+            token=token
+        )
+        print("✅ Modelo CLIP cargado")
 
-    processor = CLIPProcessor.from_pretrained(
-        "openai/clip-vit-base-patch32",
-        token=token
-    )
-
-    print("✅ Modelo CLIP cargado")
-
-    print("⏳ Cargando OCR...")
-    reader = easyocr.Reader(['es', 'en'])
-    print("✅ OCR cargado")
+    if reader is None:
+        print("⏳ Cargando OCR...")
+        reader = easyocr.Reader(['es', 'en'])
+        print("✅ OCR cargado")
 
 def clasificar_binario(imagen: Image.Image, clase_positiva: str, clase_negativa: str):
     inputs = processor(
@@ -77,7 +76,7 @@ def clasificar_subclases(imagen: Image.Image, subclases: list[str]):
 
 @app.post("/clasificar")
 async def clasificar(imagen: UploadFile = File(...)):
-
+    ensure_models_loaded()
     contenido = await imagen.read()
     img = Image.open(io.BytesIO(contenido)).convert("RGB")
 
@@ -251,6 +250,7 @@ def extraer_tracking(imagen: Image.Image):
 
 @app.post("/extraer-tracking")
 async def extraer_tracking_endpoint(imagen: UploadFile = File(...)):
+    ensure_models_loaded()
     contenido = await imagen.read()
     img = Image.open(io.BytesIO(contenido)).convert("RGB")
     
