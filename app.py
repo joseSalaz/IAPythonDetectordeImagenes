@@ -231,37 +231,42 @@ async def clasificar(imagen: UploadFile = File(...)):
 
 def extraer_tracking(imagen: Image.Image):
     img_array = np.array(imagen)
-    
-    # Extraer todo el texto - resultados son tuplas (bbox, texto, confianza)
     resultados = reader.readtext(img_array)
     
     textos = []
-    textos_raw = []  # solo los strings de texto
+    textos_raw = []
     
     for (bbox, texto, confianza) in resultados:
-        textos.append({
-            "texto": texto,
-            "confianza": round(confianza * 100, 2)
-        })
-        textos_raw.append(texto)  # ← guardamos solo el string
+        textos.append({"texto": texto, "confianza": round(confianza * 100, 2)})
+        textos_raw.append(texto)
     
-    # Buscar código de tracking con regex
     patrones_tracking = [
-        r'\b[A-Z]{2,4}\d{8,12}\b',    # WYB445884472
-        r'\b[A-Z]{1,3}\d{9,15}\b',    # PE123456789
-        r'\b\d{10,15}\b',              # solo números largos
-        r'\b[A-Z0-9]{10,20}\b',        # alfanumérico largo
+        r'\b[A-Z]{2,4}\d{8,12}\b',
+        r'\b[A-Z]{1,3}\d{9,15}\b',
+        r'\b\d{10,15}\b',
+        r'\b[A-Z]{2,4}\d{6,10}[A-Z]{2,4}\b',
+        r'\d{7,10}\s*[-–]\s*[A-Z]{2,6}',
     ]
     
     trackings_encontrados = []
-    texto_completo = " ".join(textos_raw)  # ← usamos la lista de strings
-    
-    for patron in patrones_tracking:
-        matches = re.findall(patron, texto_completo)
-        for match in matches:
-            if match not in trackings_encontrados:
-                trackings_encontrados.append(match)
-    
+
+    # Candidatos: textos individuales + pares consecutivos unidos
+    candidatos = list(textos_raw)
+    for i in range(len(textos_raw) - 1):
+        candidatos.append(f"{textos_raw[i]} - {textos_raw[i+1]}")
+        candidatos.append(f"{textos_raw[i]}-{textos_raw[i+1]}")
+        candidatos.append(f"{textos_raw[i]} {textos_raw[i+1]}")
+
+    for texto in candidatos:
+        for patron in patrones_tracking:
+            matches = re.findall(patron, texto)
+            for match in matches:
+                if not any(c.isdigit() for c in match):
+                    continue
+                match_limpio = re.sub(r'\s*[-–]\s*', '-', match).strip()
+                if match_limpio not in trackings_encontrados:
+                    trackings_encontrados.append(match_limpio)
+
     return {
         "trackings": trackings_encontrados,
         "tracking_principal": trackings_encontrados[0] if trackings_encontrados else None,
